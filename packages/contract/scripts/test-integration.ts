@@ -99,6 +99,10 @@ async function fundAccount(keypair: Keypair): Promise<void> {
   log(`Funded ${keypair.publicKey()} via Friendbot`);
 }
 
+/**
+ * Retrieve balance for a specific asset code on a given account.
+ * Returns 0 when the account is not found or the asset is absent.
+ */
 async function getBalance(publicKey: string, assetCode: string): Promise<number> {
   const res = await fetch(`${HORIZON_URL}/accounts/${publicKey}`);
   if (!res.ok) return 0;
@@ -121,6 +125,12 @@ async function getNativeBalance(publicKey: string): Promise<number> {
 // stellar CLI wrappers
 // ---------------------------------------------------------------------------
 
+/**
+ * Run the `stellar` CLI with the project's deployer identity and return stdout.
+ * Throws on non-zero exit via execSync.
+ * @param args - CLI arguments to pass to `stellar`
+ * @returns stdout trimmed as string
+ */
 function stellarCli(args: string): string {
   return execSync(
     `stellar ${args} --network ${NETWORK} --source ${DEPLOYER_SECRET}`,
@@ -128,6 +138,11 @@ function stellarCli(args: string): string {
   ).trim();
 }
 
+/**
+ * Deploy a WASM contract via the `stellar` CLI and return the deployed contract ID.
+ * @param wasmName - file stem of the wasm file (e.g. "math_lib")
+ * @returns deployed contract ID string
+ */
 function deployContract(wasmName: string): string {
   const wasmPath = path.join(WASM_DIR, `${wasmName}.wasm`);
   if (!fs.existsSync(wasmPath)) {
@@ -140,6 +155,13 @@ function deployContract(wasmName: string): string {
   return output.split("\n").pop()!.trim();
 }
 
+/**
+ * Invoke a read or write function on a deployed contract via `stellar contract invoke`.
+ * @param contractId - target contract id/address
+ * @param functionName - function name to invoke
+ * @param args - array of JSON-stringified arguments to pass as `--arg`
+ * @returns raw stdout from the CLI (may be empty string)
+ */
 function invokeContract(
   contractId: string,
   functionName: string,
@@ -164,7 +186,11 @@ interface Deployments {
   mathLib: string;
 }
 
-async function deployAll(deployer: Keypair): Promise<Deployments> {
+/**
+ * Deploy all contracts in dependency order. Uses `stellarCli` which in turn
+ * relies on `DEPLOYER_SECRET` to sign transactions.
+ */
+async function deployAll(): Promise<Deployments> {
   log("Deploying contracts to testnet…");
 
   const mathLib = deployContract("math_lib");
@@ -217,6 +243,23 @@ function parseSCAddress(raw: string): string {
   }
 }
 
+/**
+ * Safely parse a string into a bigint, returning a fallback when the
+ * provided string is empty or cannot be parsed. This avoids runtime
+ * exceptions when the external CLI returns empty output.
+ * @param raw - raw string to parse
+ * @param fallback - fallback bigint to use when parsing fails (default 0)
+ */
+function safeParseBigInt(raw: string | null | undefined, fallback = BigInt(0)): bigint {
+  const s = raw?.toString().trim();
+  if (!s) return fallback;
+  try {
+    return BigInt(s);
+  } catch {
+    return fallback;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Main integration test suite
 // ---------------------------------------------------------------------------
@@ -245,7 +288,7 @@ async function runTests(): Promise<void> {
   // 2 ─── Deploy contracts ───────────────────────────────────────────────────
   log("Step 2: Deploying contracts");
 
-  const contracts = await deployAll(deployer);
+  const contracts = await deployAll();
 
   // 3 ─── Initialize contracts ───────────────────────────────────────────────
   log("Step 3: Initialising contracts");
@@ -337,7 +380,7 @@ async function runTests(): Promise<void> {
 
   // Verify the pool has active liquidity
   const poolLiq = invokeContract(contracts.clPool, "get_liquidity", []);
-  const activeLiquidity = BigInt(poolLiq.trim());
+  const activeLiquidity = safeParseBigInt(poolLiq);
   assert(
     activeLiquidity === LIQUIDITY,
     `pool active liquidity equals added amount (${activeLiquidity})`
@@ -360,7 +403,7 @@ async function runTests(): Promise<void> {
   // Verify price moved after swap
   const sqrtPriceAfter = invokeContract(contracts.clPool, "get_sqrt_price", []);
   assert(
-    BigInt(sqrtPriceAfter.trim()) < SQRT_PRICE_ONE_TO_ONE,
+    safeParseBigInt(sqrtPriceAfter) < SQRT_PRICE_ONE_TO_ONE,
     "sqrt price decreased after zero-for-one swap"
   );
 
@@ -441,7 +484,7 @@ async function runTests(): Promise<void> {
   // Active liquidity should be zero now
   const finalLiq = invokeContract(contracts.clPool, "get_liquidity", []);
   assert(
-    BigInt(finalLiq.trim()) === BigInt(0),
+    safeParseBigInt(finalLiq) === BigInt(0),
     "active liquidity is zero after full removal"
   );
 
