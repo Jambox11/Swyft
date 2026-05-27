@@ -10,10 +10,12 @@ const RECENT_MAX = 5;
 export function useTokens() {
   const [tokens, setTokens] = useState<Token[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setError(null);
 
     fetch(`${API_BASE}/pools`)
       .then((r) => r.json())
@@ -30,13 +32,18 @@ export function useTokens() {
         }
         setTokens(list);
       })
-      .catch(() => { if (!cancelled) setTokens([]); })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setTokens([]);
+          setError(err instanceof Error ? err : new Error('Failed to load tokens'));
+        }
+      })
       .finally(() => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };
   }, []);
 
-  return { tokens, loading };
+  return { tokens, loading, error };
 }
 
 export function useRecentTokens() {
