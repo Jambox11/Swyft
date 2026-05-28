@@ -1,4 +1,4 @@
-import { PoolState, TickState } from "./types";
+import { PoolState, TickState } from './types';
 
 const Q96 = 2n ** 96n;
 const MAX_TICK = 887272;
@@ -23,22 +23,29 @@ export interface SwapQuote {
 
 /** A zero-value quote returned when inputs are missing or invalid. */
 export const EMPTY_QUOTE: SwapQuote = {
-  amountOut: "0",
+  amountOut: '0',
   priceImpact: 0,
-  lpFee: "0",
-  protocolFee: "0",
-  minimumReceived: "0",
-  executionPrice: "0",
+  lpFee: '0',
+  protocolFee: '0',
+  minimumReceived: '0',
+  executionPrice: '0',
 };
 
 /** Returns true when a quote carries no meaningful output (e.g. empty input). */
 export function isEmptyQuote(quote: SwapQuote): boolean {
-  return quote.amountOut === "0" && quote.executionPrice === "0";
+  return quote.amountOut === '0' && quote.executionPrice === '0';
 }
 
+/**
+ * Calculates a local swap quote.
+ *
+ * @param params - Quote inputs for the swap.
+ * @returns A swap quote including output amount, price impact, fees, and minimum received.
+ */
 export function calculateSwapQuote(params: SwapQuoteParams): SwapQuote {
   if (!params?.amountIn) return EMPTY_QUOTE;
   const amountIn = parseFloat(params.amountIn);
+
   if (!amountIn || amountIn <= 0) {
     return EMPTY_QUOTE;
   }
@@ -56,7 +63,7 @@ export function calculateSwapQuote(params: SwapQuoteParams): SwapQuote {
     amountOut: amountOut.toFixed(7),
     priceImpact: parseFloat(priceImpact.toFixed(4)),
     lpFee: lpFeeAmt.toFixed(7),
-    protocolFee: "0",
+    protocolFee: '0',
     minimumReceived: minimumReceived.toFixed(7),
     executionPrice: executionPrice.toFixed(7),
   };
@@ -80,7 +87,7 @@ export interface LocalSwapQuote {
 export function getSwapQuote(params: LocalSwapQuoteParams): LocalSwapQuote {
   const amountIn = toBigIntAmount(params.amountIn);
   if (amountIn <= 0n) {
-    throw new Error("amountIn must be greater than zero");
+    throw new Error('amountIn must be greater than zero');
   }
 
   const zeroForOne = direction(params.poolState, params.tokenIn);
@@ -89,13 +96,13 @@ export function getSwapQuote(params: LocalSwapQuoteParams): LocalSwapQuote {
   let currentTick = params.poolState.currentTick;
 
   if (liquidity <= 0n) {
-    throw new Error("zero liquidity in current range");
+    throw new Error('zero liquidity in current range');
   }
 
   const fee = mulDivRoundingUp(amountIn, feeUnits(params.poolState.feeTier), 1_000_000n);
   let remaining = amountIn - fee;
   if (remaining <= 0n) {
-    throw new Error("amountIn is fully consumed by fees");
+    throw new Error('amountIn is fully consumed by fees');
   }
 
   let amountOut = 0n;
@@ -103,7 +110,7 @@ export function getSwapQuote(params: LocalSwapQuoteParams): LocalSwapQuote {
 
   while (remaining > 0n) {
     if (liquidity <= 0n) {
-      throw new Error("zero liquidity in range");
+      throw new Error('zero liquidity in range');
     }
 
     const nextTick = ticks.shift();
@@ -123,7 +130,7 @@ export function getSwapQuote(params: LocalSwapQuoteParams): LocalSwapQuote {
     }
 
     if (!nextTick) {
-      throw new Error("amount exceeds available liquidity");
+      throw new Error('amount exceeds available liquidity');
     }
 
     liquidity = zeroForOne
@@ -146,14 +153,10 @@ export function getSwapQuote(params: LocalSwapQuoteParams): LocalSwapQuote {
 function direction(pool: PoolState, tokenIn: string): boolean {
   if (tokenIn === pool.token0) return true;
   if (tokenIn === pool.token1) return false;
-  throw new Error("invalid token direction");
+  throw new Error('invalid token direction');
 }
 
-function sortedTicks(
-  ticks: TickState[],
-  zeroForOne: boolean,
-  currentTick: number,
-): TickState[] {
+function sortedTicks(ticks: TickState[], zeroForOne: boolean, currentTick: number): TickState[] {
   return ticks
     .filter((tick) => (zeroForOne ? tick.tick < currentTick : tick.tick > currentTick))
     .sort((a, b) => (zeroForOne ? b.tick - a.tick : a.tick - b.tick));
@@ -163,7 +166,7 @@ function swapToken0ForToken1Step(
   amountRemaining: bigint,
   liquidity: bigint,
   sqrtPrice: bigint,
-  targetSqrtPrice: bigint,
+  targetSqrtPrice: bigint
 ) {
   const amountToTarget = getAmount0Delta(targetSqrtPrice, sqrtPrice, liquidity, true);
 
@@ -189,7 +192,7 @@ function swapToken1ForToken0Step(
   amountRemaining: bigint,
   liquidity: bigint,
   sqrtPrice: bigint,
-  targetSqrtPrice: bigint,
+  targetSqrtPrice: bigint
 ) {
   const amountToTarget = getAmount1Delta(sqrtPrice, targetSqrtPrice, liquidity, true);
 
@@ -215,7 +218,7 @@ function getAmount0Delta(
   sqrtA: bigint,
   sqrtB: bigint,
   liquidity: bigint,
-  roundUp: boolean,
+  roundUp: boolean
 ): bigint {
   const [lower, upper] = sqrtA < sqrtB ? [sqrtA, sqrtB] : [sqrtB, sqrtA];
   const numerator = liquidity * (upper - lower) * Q96;
@@ -227,7 +230,7 @@ function getAmount1Delta(
   sqrtA: bigint,
   sqrtB: bigint,
   liquidity: bigint,
-  roundUp: boolean,
+  roundUp: boolean
 ): bigint {
   const [lower, upper] = sqrtA < sqrtB ? [sqrtA, sqrtB] : [sqrtB, sqrtA];
   const numerator = liquidity * (upper - lower);
@@ -237,7 +240,7 @@ function getAmount1Delta(
 function getNextSqrtPriceFromAmount0In(
   sqrtPrice: bigint,
   liquidity: bigint,
-  amountIn: bigint,
+  amountIn: bigint
 ): bigint {
   const numerator = liquidity * sqrtPrice * Q96;
   const denominator = liquidity * Q96 + amountIn * sqrtPrice;
@@ -260,20 +263,20 @@ function priceImpact(startSqrt: string, endSqrt: bigint): number {
 
 function applySlippage(amountOut: bigint, slippage: number): bigint {
   const bps = BigInt(Math.max(0, Math.floor(slippage)));
-  if (bps > 10_000n) throw new Error("slippage cannot exceed 10000 bps");
+  if (bps > 10_000n) throw new Error('slippage cannot exceed 10000 bps');
   return (amountOut * (10_000n - bps)) / 10_000n;
 }
 
 function feeUnits(feeTier: number): bigint {
   if (!Number.isInteger(feeTier) || feeTier < 0 || feeTier >= 1_000_000) {
-    throw new Error("invalid fee tier");
+    throw new Error('invalid fee tier');
   }
   return BigInt(feeTier);
 }
 
 function toBigIntAmount(value: string | bigint): bigint {
-  if (typeof value === "bigint") return value;
-  if (!/^\d+$/.test(value)) throw new Error("amountIn must be an integer string");
+  if (typeof value === 'bigint') return value;
+  if (!/^\d+$/.test(value)) throw new Error('amountIn must be an integer string');
   return BigInt(value);
 }
 
