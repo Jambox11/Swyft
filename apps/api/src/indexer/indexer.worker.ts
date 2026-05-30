@@ -90,9 +90,13 @@ export class IndexerWorker implements OnModuleInit, OnModuleDestroy {
       }).catch(() => null);
 
       if (counts) {
-        this.logger.log(
-          `queue=${worker.name} waiting=${counts.waiting} active=${counts.active}`,
-        );
+        if (counts.waiting === 0 && counts.active === 0) {
+          this.logger.debug(`queue=${worker.name} is empty — no events to process`);
+        } else {
+          this.logger.log(
+            `queue=${worker.name} waiting=${counts.waiting} active=${counts.active}`,
+          );
+        }
       }
     }
   }
