@@ -5,7 +5,7 @@ async function callContract(
   rpcUrl: string,
   contractAddress: string,
   method: string,
-  args: xdr.ScVal[] = [],
+  args: xdr.ScVal[] = []
 ): Promise<xdr.ScVal> {
   const server = new SorobanRpc.Server(rpcUrl, { allowHttp: rpcUrl.startsWith('http://') });
   const contract = new Contract(contractAddress);
@@ -85,13 +85,38 @@ export async function getPosition({
   const raw = scValToNative(retval) as Record<string, unknown>;
   if (!raw || typeof raw !== 'object') return null;
 
+  // If the decoder yields an empty object, treat it as Option::None.
+  if (Object.keys(raw as Record<string, unknown>).length === 0) {
+    throw new SwyftRpcError(`Position is empty (token not found) on ${positionNftId}`);
+  }
+
+  // Handle potential option-like wrappers: { value: null }
+  const maybeValue = (raw as Record<string, unknown>)['value'];
+  if ('value' in (raw as Record<string, unknown>) && maybeValue == null) {
+    throw new SwyftRpcError(`Position is empty (token not found) on ${positionNftId}`);
+  }
+
+  // If wrapped as { value: PositionMetadata }, unwrap it.
+  const position =
+    'value' in (raw as Record<string, unknown>)
+      ? ((raw as Record<string, unknown>)['value'] ?? raw)
+      : raw;
+
   return {
     positionNftId,
-    owner: String(raw['owner'] ?? ''),
-    pool: String(raw['pool'] ?? ''),
-    lowerTick: Number(raw['lower_tick'] ?? raw['lowerTick'] ?? 0),
-    upperTick: Number(raw['upper_tick'] ?? raw['upperTick'] ?? 0),
-    liquidity: String(raw['liquidity'] ?? '0'),
+    owner: String((position as Record<string, unknown>)['owner'] ?? ''),
+    pool: String((position as Record<string, unknown>)['pool'] ?? ''),
+    lowerTick: Number(
+      (position as Record<string, unknown>)['lower_tick'] ??
+        (position as Record<string, unknown>)['lowerTick'] ??
+        0
+    ),
+    upperTick: Number(
+      (position as Record<string, unknown>)['upper_tick'] ??
+        (position as Record<string, unknown>)['upperTick'] ??
+        0
+    ),
+    liquidity: String((position as Record<string, unknown>)['liquidity'] ?? '0'),
   };
 }
 
