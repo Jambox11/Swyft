@@ -63,9 +63,16 @@ export function isEmptyQuote(quote: SwapQuote): boolean {
   return quote.amountOut === '0' && quote.executionPrice === '0';
 }
 
+/**
+ * Calculates a local swap quote.
+ *
+ * @param params - Quote inputs for the swap.
+ * @returns A swap quote including output amount, price impact, fees, and minimum received.
+ */
 export function calculateSwapQuote(params: SwapQuoteParams): SwapQuote {
   if (!params?.amountIn) return EMPTY_QUOTE;
   const amountIn = parseFloat(params.amountIn);
+
   if (!amountIn || amountIn <= 0) {
     return EMPTY_QUOTE;
   }
@@ -227,7 +234,7 @@ function getAmount0Delta(
   sqrtA: bigint,
   sqrtB: bigint,
   liquidity: bigint,
-  roundUp: boolean,
+  roundUp: boolean
 ): bigint {
   const [lower, upper] = sqrtA < sqrtB ? [sqrtA, sqrtB] : [sqrtB, sqrtA];
   const numerator = liquidity * (upper - lower) * Q96;
@@ -239,7 +246,7 @@ function getAmount1Delta(
   sqrtA: bigint,
   sqrtB: bigint,
   liquidity: bigint,
-  roundUp: boolean,
+  roundUp: boolean
 ): bigint {
   const [lower, upper] = sqrtA < sqrtB ? [sqrtA, sqrtB] : [sqrtB, sqrtA];
   const numerator = liquidity * (upper - lower);
@@ -249,7 +256,7 @@ function getAmount1Delta(
 function getNextSqrtPriceFromAmount0In(
   sqrtPrice: bigint,
   liquidity: bigint,
-  amountIn: bigint,
+  amountIn: bigint
 ): bigint {
   const numerator = liquidity * sqrtPrice * Q96;
   const denominator = liquidity * Q96 + amountIn * sqrtPrice;
