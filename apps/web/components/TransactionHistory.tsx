@@ -24,7 +24,7 @@ export function TransactionHistory({ walletAddress }: TransactionHistoryProps) {
   const filteredLpActivity = filterByDate(lpData?.items || [], startDate, endDate);
 
   const totalPages = Math.ceil(
-    (activeTab === "swaps" ? swapsData?.total : lpData?.total || 0) / 20
+    (activeTab === "swaps" ? (swapsData?.total ?? 0) : (lpData?.total ?? 0)) / 20
   );
 
   function filterByDate<T extends { timestamp: number }>(items: T[], start: string, end: string): T[] {
@@ -270,7 +270,7 @@ function LpTable({ activities, loading, error, getExplorerUrl, formatDate, trunc
     );
   }
 
-  const getTypeColor = (type: string) => {
+  const getTypeColor = (type: LpActivityType): string => {
     switch (type) {
       case "mint":
         return "text-emerald-600 dark:text-emerald-400";
@@ -278,12 +278,10 @@ function LpTable({ activities, loading, error, getExplorerUrl, formatDate, trunc
         return "text-red-600 dark:text-red-400";
       case "fee_collection":
         return "text-amber-600 dark:text-amber-400";
-      default:
-        return "text-zinc-600 dark:text-zinc-400";
     }
   };
 
-  const getTypeLabel = (type: string) => {
+  const getTypeLabel = (type: LpActivityType): string => {
     switch (type) {
       case "mint":
         return "Add";
@@ -291,8 +289,6 @@ function LpTable({ activities, loading, error, getExplorerUrl, formatDate, trunc
         return "Remove";
       case "fee_collection":
         return "Fees";
-      default:
-        return type;
     }
   };
 

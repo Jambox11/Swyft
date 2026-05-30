@@ -5,20 +5,47 @@ const MAX_TICK = 887272;
 const MIN_TICK = -887272;
 
 export interface SwapQuoteParams {
-  poolId: string;
-  tokenInId: string;
-  tokenOutId: string;
-  amountIn: string;
-  slippageBps: number;
+  readonly poolId: string;
+  readonly tokenInId: string;
+  readonly tokenOutId: string;
+  readonly amountIn: string;
+  readonly slippageBps: number;
 }
 
 export interface SwapQuote {
-  amountOut: string;
-  priceImpact: number;
-  lpFee: string;
-  protocolFee: string;
-  minimumReceived: string;
-  executionPrice: string;
+  readonly amountOut: string;
+  readonly priceImpact: number;
+  readonly lpFee: string;
+  readonly protocolFee: string;
+  readonly minimumReceived: string;
+  readonly executionPrice: string;
+}
+
+/** Pool state extended with optional tick ladder for local simulation. */
+export type PoolStateWithTicks = PoolState & { readonly ticks?: readonly TickState[] };
+
+export interface LocalSwapQuoteParams {
+  readonly poolState: PoolStateWithTicks;
+  readonly tokenIn: string;
+  readonly amountIn: string | bigint;
+  /** Slippage tolerance in basis points (0–10000). */
+  readonly slippage: number;
+}
+
+export interface LocalSwapQuote {
+  readonly amountOut: string;
+  readonly priceImpact: number;
+  readonly fee: string;
+  readonly minimumReceived: string;
+  readonly sqrtPriceLimitX96: string;
+}
+
+/** Intermediate result of a single tick-crossing swap step. */
+interface SwapStepResult {
+  readonly amountIn: bigint;
+  readonly amountOut: bigint;
+  readonly nextSqrtPrice: bigint;
+  readonly reachedTarget: boolean;
 }
 
 /** A zero-value quote returned when inputs are missing or invalid. */
@@ -57,31 +84,16 @@ export function calculateSwapQuote(params: SwapQuoteParams): SwapQuote {
   const amountOut = (reserveOut * amountInAfterFee) / (reserveIn + amountInAfterFee);
   const spotPrice = reserveOut / reserveIn;
   const executionPrice = amountOut / amountIn;
-  const priceImpact = Math.max(0, ((spotPrice - executionPrice) / spotPrice) * 100);
+  const priceImpactPct = Math.max(0, ((spotPrice - executionPrice) / spotPrice) * 100);
   const minimumReceived = amountOut * (1 - params.slippageBps / 10_000);
   return {
     amountOut: amountOut.toFixed(7),
-    priceImpact: parseFloat(priceImpact.toFixed(4)),
+    priceImpact: parseFloat(priceImpactPct.toFixed(4)),
     lpFee: lpFeeAmt.toFixed(7),
     protocolFee: '0',
     minimumReceived: minimumReceived.toFixed(7),
     executionPrice: executionPrice.toFixed(7),
   };
-}
-
-export interface LocalSwapQuoteParams {
-  poolState: PoolState & { ticks?: TickState[] };
-  tokenIn: string;
-  amountIn: string | bigint;
-  slippage: number;
-}
-
-export interface LocalSwapQuote {
-  amountOut: string;
-  priceImpact: number;
-  fee: string;
-  minimumReceived: string;
-  sqrtPriceLimitX96: string;
 }
 
 export function getSwapQuote(params: LocalSwapQuoteParams): LocalSwapQuote {
@@ -117,7 +129,7 @@ export function getSwapQuote(params: LocalSwapQuoteParams): LocalSwapQuote {
     const targetTick = nextTick?.tick ?? (zeroForOne ? MIN_TICK : MAX_TICK);
     const targetSqrtPrice = sqrtRatioAtTick(targetTick);
 
-    const step = zeroForOne
+    const step: SwapStepResult = zeroForOne
       ? swapToken0ForToken1Step(remaining, liquidity, sqrtPrice, targetSqrtPrice)
       : swapToken1ForToken0Step(remaining, liquidity, sqrtPrice, targetSqrtPrice);
 
@@ -143,7 +155,7 @@ export function getSwapQuote(params: LocalSwapQuoteParams): LocalSwapQuote {
 
   return {
     amountOut: amountOut.toString(),
-    priceImpact: priceImpact(params.poolState.sqrtPrice, sqrtPrice),
+    priceImpact: calcPriceImpact(params.poolState.sqrtPrice, sqrtPrice),
     fee: fee.toString(),
     minimumReceived: minimumReceived.toString(),
     sqrtPriceLimitX96: sqrtPrice.toString(),
@@ -156,7 +168,11 @@ function direction(pool: PoolState, tokenIn: string): boolean {
   throw new Error('invalid token direction');
 }
 
-function sortedTicks(ticks: TickState[], zeroForOne: boolean, currentTick: number): TickState[] {
+function sortedTicks(
+  ticks: readonly TickState[],
+  zeroForOne: boolean,
+  currentTick: number,
+): TickState[] {
   return ticks
     .filter((tick) => (zeroForOne ? tick.tick < currentTick : tick.tick > currentTick))
     .sort((a, b) => (zeroForOne ? b.tick - a.tick : a.tick - b.tick));
@@ -166,8 +182,8 @@ function swapToken0ForToken1Step(
   amountRemaining: bigint,
   liquidity: bigint,
   sqrtPrice: bigint,
-  targetSqrtPrice: bigint
-) {
+  targetSqrtPrice: bigint,
+): SwapStepResult {
   const amountToTarget = getAmount0Delta(targetSqrtPrice, sqrtPrice, liquidity, true);
 
   if (amountRemaining >= amountToTarget) {
@@ -192,8 +208,8 @@ function swapToken1ForToken0Step(
   amountRemaining: bigint,
   liquidity: bigint,
   sqrtPrice: bigint,
-  targetSqrtPrice: bigint
-) {
+  targetSqrtPrice: bigint,
+): SwapStepResult {
   const amountToTarget = getAmount1Delta(sqrtPrice, targetSqrtPrice, liquidity, true);
 
   if (amountRemaining >= amountToTarget) {
@@ -252,7 +268,7 @@ function sqrtRatioAtTick(tick: number): bigint {
   return BigInt(Math.floor(ratio * Number(Q96)));
 }
 
-function priceImpact(startSqrt: string, endSqrt: bigint): number {
+function calcPriceImpact(startSqrt: string, endSqrt: bigint): number {
   const start = Number(BigInt(startSqrt));
   const end = Number(endSqrt);
   if (!Number.isFinite(start) || !Number.isFinite(end) || start === 0) return 0;
