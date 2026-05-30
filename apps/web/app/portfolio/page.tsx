@@ -80,9 +80,13 @@ export default function PortfolioPage() {
       {/* Summary */}
       <div className="mb-6 sm:mb-8 rounded-2xl border border-zinc-200 bg-white px-4 py-4 sm:px-6 sm:py-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
         <p className="text-xs text-zinc-400 mb-1">Total portfolio value</p>
-        <p className="text-3xl font-bold text-zinc-900 dark:text-white">
-          ${totalValueUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-        </p>
+        {loading && active.length === 0 ? (
+          <div className="h-9 w-32 animate-pulse rounded bg-zinc-100 dark:bg-zinc-800 mb-1" />
+        ) : (
+          <p className="text-3xl font-bold text-zinc-900 dark:text-white">
+            ${(totalValueUsd ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </p>
+        )}
         <p className="text-xs text-zinc-400 mt-1">{active.length} active position{active.length !== 1 ? "s" : ""}</p>
       </div>
 
@@ -121,13 +125,23 @@ export default function PortfolioPage() {
       {/* Empty state */}
       {!loading && positions.length === 0 && (
         <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
-          <p className="text-sm text-zinc-500">No positions yet.</p>
-          <Link
-            href="/pools"
-            className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 transition-colors"
-          >
-            Browse pools
-          </Link>
+          {showClosed ? (
+            <>
+              <p className="text-sm text-zinc-500">No closed positions found.</p>
+              <p className="text-xs text-zinc-400">Positions you close will appear here.</p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-zinc-500">You have no active positions yet.</p>
+              <p className="text-xs text-zinc-400">Add liquidity to a pool to get started.</p>
+              <Link
+                href="/pools"
+                className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 transition-colors"
+              >
+                Browse pools
+              </Link>
+            </>
+          )}
         </div>
       )}
 
