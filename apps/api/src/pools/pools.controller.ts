@@ -16,6 +16,7 @@ import {
 import { CacheService } from '../cache/cache.service';
 import { GetPoolsQueryDto } from './dto/get-pools-query.dto';
 import { GetTicksQueryDto } from './dto/get-ticks-query.dto';
+import { PoolDetailDto } from './dto/pool-detail.dto';
 import { TickData } from './pools.repository';
 import { PoolsListResponse, PoolsService } from './pools.service';
 
