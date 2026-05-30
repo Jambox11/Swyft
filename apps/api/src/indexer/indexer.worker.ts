@@ -90,15 +90,23 @@ export class IndexerWorker implements OnModuleInit, OnModuleDestroy {
       }).catch(() => null);
 
       if (counts) {
-        this.logger.log(
-          `queue=${worker.name} waiting=${counts.waiting} active=${counts.active}`,
-        );
+        if (counts.waiting === 0 && counts.active === 0) {
+          this.logger.debug(`queue=${worker.name} is empty — no events to process`);
+        } else {
+          this.logger.log(
+            `queue=${worker.name} waiting=${counts.waiting} active=${counts.active}`,
+          );
+        }
       }
     }
   }
 
   private async handlePoolCreated(job: Job<PoolCreatedJobData>) {
     const d = job.data;
+    if (!d?.eventId || !d?.poolId) {
+      this.logger.warn(`[indexer] handlePoolCreated: empty or incomplete data — jobId=${job.id}, skipping`);
+      return;
+    }
     await this.prisma.poolCreated.upsert({
       where: { eventId: d.eventId },
       update: {},
@@ -115,6 +123,10 @@ export class IndexerWorker implements OnModuleInit, OnModuleDestroy {
 
   private async handleSwapProcessed(job: Job<SwapProcessedJobData>) {
     const d = job.data;
+    if (!d?.eventId || !d?.poolId) {
+      this.logger.warn(`[indexer] handleSwapProcessed: empty or incomplete data — jobId=${job.id}, skipping`);
+      return;
+    }
     await this.prisma.swapProcessed.upsert({
       where: { eventId: d.eventId },
       update: {},
@@ -134,6 +146,10 @@ export class IndexerWorker implements OnModuleInit, OnModuleDestroy {
 
   private async handlePositionMinted(job: Job<PositionMintedJobData>) {
     const d = job.data;
+    if (!d?.eventId || !d?.poolId) {
+      this.logger.warn(`[indexer] handlePositionMinted: empty or incomplete data — jobId=${job.id}, skipping`);
+      return;
+    }
     await this.prisma.positionMinted.upsert({
       where: { eventId: d.eventId },
       update: {},
@@ -152,6 +168,10 @@ export class IndexerWorker implements OnModuleInit, OnModuleDestroy {
 
   private async handlePositionBurned(job: Job<PositionBurnedJobData>) {
     const d = job.data;
+    if (!d?.eventId || !d?.poolId) {
+      this.logger.warn(`[indexer] handlePositionBurned: empty or incomplete data — jobId=${job.id}, skipping`);
+      return;
+    }
     await this.prisma.positionBurned.upsert({
       where: { eventId: d.eventId },
       update: {},
@@ -170,6 +190,10 @@ export class IndexerWorker implements OnModuleInit, OnModuleDestroy {
 
   private async handleFeesCollected(job: Job<FeesCollectedJobData>) {
     const d = job.data;
+    if (!d?.eventId || !d?.poolId) {
+      this.logger.warn(`[indexer] handleFeesCollected: empty or incomplete data — jobId=${job.id}, skipping`);
+      return;
+    }
     await this.prisma.feesCollected.upsert({
       where: { eventId: d.eventId },
       update: {},
