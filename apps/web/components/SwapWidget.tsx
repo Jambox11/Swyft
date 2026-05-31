@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 // import { SwapInput, PriceImpactBadge, SlippagePanel, type TokenPair, type Token } from "@swyft/ui"; // TODO: export these from @swyft/ui
 import { useTokens, useRecentTokens, usePoolId } from "@/hooks/useTokens";
 import { useSwapQuote } from "@/hooks/useSwapQuote";
@@ -217,7 +217,15 @@ interface Props {
  * Handles token selection, quote fetching, slippage configuration, and
  * swap confirmation in a single composable component.
  *
- * @param props - {@link Props}
+ * @param props - The configuration props for the SwapWidget component.
+ * @param props.wallet - Current wallet state. Pass `{ address: null }` when no wallet is
+ *   connected — the widget will render a "Connect wallet" prompt.
+ * @param props.onTokenInChange - Callback invoked when the user selects a new "token in".
+ *   Receives `null` when the selection is cleared.
+ * @param props.onTokenOutChange - Callback invoked when the user selects a new "token out".
+ *   Receives `null` when the selection is cleared.
+ * @param props.onSwapSuccess - Callback invoked after a swap transaction is confirmed and the
+ *   confirmation modal is dismissed. Use this to refresh balances or history.
  * @returns A React element containing the full swap UI, or a loading
  *   skeleton / error state while token data is being fetched.
  *
@@ -234,7 +242,7 @@ export function SwapWidget({
   onTokenInChange,
   onTokenOutChange,
   onSwapSuccess,
-}: Props) {
+}: Props): React.JSX.Element {
   const { tokens, loading: tokensLoading, error: tokensError } = useTokens();
   const { recentIds: _recentIds, pushRecent } = useRecentTokens();
   const [pair, setPair] = useState<TokenPair>({ tokenIn: null, tokenOut: null });
