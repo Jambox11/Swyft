@@ -101,8 +101,10 @@ export default function PortfolioPage() {
             type="button"
             role="switch"
             aria-checked={showClosed}
+            aria-label="Show closed"
+            disabled={loading}
             onClick={() => setShowClosed((v) => !v)}
-            className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+            className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed ${
               showClosed ? "bg-indigo-600" : "bg-zinc-300 dark:bg-zinc-700"
             }`}
           >
@@ -132,7 +134,7 @@ export default function PortfolioPage() {
             </>
           ) : (
             <>
-              <p className="text-sm text-zinc-500">You have no active positions yet.</p>
+              <p className="text-sm text-zinc-500">No positions yet.</p>
               <p className="text-xs text-zinc-400">Add liquidity to a pool to get started.</p>
               <Link
                 href="/pools"
