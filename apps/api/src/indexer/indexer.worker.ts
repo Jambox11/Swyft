@@ -53,7 +53,8 @@ export class IndexerWorker implements OnModuleInit, OnModuleDestroy {
       this.queueEvents.push(qe);
     }
 
-    this.logger.log('Indexer workers started');
+    this._isReady = true;
+    this.logger.log('Indexer workers ready');
     void this.logQueueDepths();
     this._isLoading = false;
     setInterval(() => void this.logQueueDepths(), 60_000);
@@ -74,7 +75,14 @@ export class IndexerWorker implements OnModuleInit, OnModuleDestroy {
     handler: (job: Job<T>) => Promise<void>,
   ): Worker<T> {
     const { connection } = makeQueueOptions();
-    const worker = new Worker<T>(queueName, handler, { connection });
+    const guardedHandler = async (job: Job<T>) => {
+      if (!this._isReady) {
+        this.logger.warn(`queue=${queueName} jobId=${job.id} skipped — indexer not ready`);
+        return;
+      }
+      return handler(job);
+    };
+    const worker = new Worker<T>(queueName, guardedHandler, { connection });
 
     worker.on('completed', (job) => {
       this.logger.log(`completed queue=${queueName} jobId=${job.id}`);
