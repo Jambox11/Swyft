@@ -1,12 +1,12 @@
 import { getSwapQuote, calculateSwapQuote, EMPTY_QUOTE, isEmptyQuote } from "../quote";
 import { PoolState } from "../types";
 
-const Q96 = 79228162514264337593543950336; // 2^96
+const Q96 = "79228162514264337593543950336"; // 2^96
 
 function pool(overrides: Partial<PoolState> = {}): PoolState {
   return {
     poolAddress: "pool",
-    sqrtPrice: Q96.toString(),
+    sqrtPrice: Q96,
     currentTick: 0,
     liquidity: "1000000000000",
     feeTier: 3000,
@@ -28,7 +28,7 @@ describe("getSwapQuote", () => {
     expect(BigInt(quote.amountOut)).toBeGreaterThan(0n);
     expect(quote.fee).toBe("3000");
     expect(BigInt(quote.minimumReceived)).toBeLessThan(BigInt(quote.amountOut));
-    expect(BigInt(quote.sqrtPriceLimitX96)).toBeLessThan(Q96);
+    expect(BigInt(quote.sqrtPriceLimitX96)).toBeLessThan(BigInt(Q96));
   });
 
   it("quotes token1 to token0 swaps locally", () => {
@@ -40,7 +40,7 @@ describe("getSwapQuote", () => {
     });
 
     expect(BigInt(quote.amountOut)).toBeGreaterThan(0n);
-    expect(BigInt(quote.sqrtPriceLimitX96)).toBeGreaterThan(Q96);
+    expect(BigInt(quote.sqrtPriceLimitX96)).toBeGreaterThan(BigInt(Q96));
   });
 
   it("simulates initialized tick crossings", () => {

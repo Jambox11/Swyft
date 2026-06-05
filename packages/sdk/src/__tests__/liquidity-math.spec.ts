@@ -84,8 +84,9 @@ describe("getAmountsForLiquidity", () => {
       sqrtPriceUpperX96: SQRT_UPPER,
       liquidity: LIQUIDITY * 2n,
     });
-    expect(doubled.amount0).toBe(base.amount0 * 2n);
-    expect(doubled.amount1).toBe(base.amount1 * 2n);
+    // Allow 1 unit tolerance for fixed-point rounding
+    expect(Math.abs(Number(doubled.amount0 - base.amount0 * 2n))).toBeLessThanOrEqual(1);
+    expect(Math.abs(Number(doubled.amount1 - base.amount1 * 2n))).toBeLessThanOrEqual(1);
   });
 });
 
