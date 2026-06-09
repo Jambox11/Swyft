@@ -25,9 +25,11 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
 
+      - name: Install system dependencies for stellar-cli
+        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
+
       - name: Install stellar-cli
-        run: |
-          cargo install --locked stellar-cli
+        run: cargo install --locked stellar-cli
 
       - name: Install pnpm
         uses: pnpm/action-setup@v3
