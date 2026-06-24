@@ -16,6 +16,7 @@ import {
 import { PriceService, SpotPriceResponse } from './price.service';
 import { CacheService, TTL } from '../cache/cache.service';
 import { PriceCandleDto } from './dto/price-candle.dto';
+import { CandlesResponseDto } from './dto/candles-response.dto';
 import { SWAGGER_TAGS } from '../swagger.constants';
 
 const VALID_INTERVALS = ['1m', '5m', '1h', '1d'] as const;
@@ -80,7 +81,7 @@ export class PriceController {
   })
   @ApiResponse({
     status: 200,
-    type: [PriceCandleDto],
+    type: CandlesResponseDto,
     description: 'Candlestick data retrieved successfully',
   })
   @ApiResponse({ status: 400, description: 'Invalid parameters' })
@@ -95,7 +96,7 @@ export class PriceController {
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('limit') limit?: string,
-  ): Promise<PriceCandleDto[]> {
+  ): Promise<CandlesResponseDto> {
     if (!VALID_INTERVALS.includes(interval)) {
       throw new BadRequestException(
         `Invalid interval. Must be one of: ${VALID_INTERVALS.join(', ')}`,
@@ -151,9 +152,10 @@ export class PriceController {
       interval === '1m' || interval === '5m'
         ? TTL.CANDLES_FAST
         : TTL.CANDLES_SLOW;
-    await this.cacheService.set(cacheKey, candles, ttl);
+    const response: CandlesResponseDto = { data: candles };
+    await this.cacheService.set(cacheKey, response, ttl);
 
-    return candles;
+    return response;
   }
 
   private getDefaultIntervalSeconds(interval: CandleInterval): number {
