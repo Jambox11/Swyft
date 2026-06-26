@@ -142,6 +142,46 @@ describe("buildBurnTx", () => {
     // Must be valid base64
     expect(() => Buffer.from(tx.xdr, "base64")).not.toThrow();
   });
+
+  it("encodes all params and timestamp in the xdr payload", () => {
+    const tx = buildBurnTx({
+      positionId: "pos-1",
+      poolId: "pool-1",
+      liquidityBps: 5000,
+      ownerAddress: "GABC",
+    });
+    const decoded = Buffer.from(tx.xdr, "base64").toString("utf-8");
+    const payload = JSON.parse(decoded);
+    expect(payload.op).toBe("burn");
+    expect(payload.positionId).toBe("pos-1");
+    expect(payload.poolId).toBe("pool-1");
+    expect(payload.liquidityBps).toBe(5000);
+    expect(payload.ownerAddress).toBe("GABC");
+    expect(payload.timestamp).toBeDefined();
+    expect(typeof payload.timestamp).toBe("string");
+  });
+
+  it("throws when liquidityBps is out of range", () => {
+    expect(() =>
+      buildBurnTx({
+        positionId: "pos-1",
+        poolId: "pool-1",
+        liquidityBps: 10001,
+        ownerAddress: "GABC",
+      })
+    ).toThrow();
+  });
+
+  it("throws when positionId is empty", () => {
+    expect(() =>
+      buildBurnTx({
+        positionId: "",
+        poolId: "pool-1",
+        liquidityBps: 5000,
+        ownerAddress: "GABC",
+      })
+    ).toThrow();
+  });
 });
 
 // ---------------------------------------------------------------------------

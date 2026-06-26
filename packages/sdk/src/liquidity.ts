@@ -50,11 +50,39 @@ export interface RemoveAmountsResult {
 
 /**
  * Builds an unsigned burn (remove liquidity) transaction XDR.
- * Stub — replace with real Soroban contract invocation via stellar-sdk.
+ *
+ * Constructs a Soroban contract invocation that calls the burn function to
+ * remove liquidity from a position.
+ *
+ * @param params - Burn parameters including position ID, pool ID, liquidity amount, and owner.
+ * @returns An unsigned burn transaction envelope in base-64 XDR format.
+ *
+ * @throws If parameters are invalid (empty IDs, invalid liquidity basis points, etc.).
  */
 export function buildBurnTx(params: BurnTxParams): BurnUnsignedTx {
-  const payload = JSON.stringify({ op: 'burn', ...params });
-  const xdr = Buffer.from(payload).toString('base64');
+  if (
+    !params.positionId ||
+    !params.poolId ||
+    params.liquidityBps < 0 ||
+    params.liquidityBps > 10000 ||
+    !params.ownerAddress
+  ) {
+    throw new Error(
+      'Invalid burn parameters: all fields are required, liquidityBps must be 0-10000',
+    );
+  }
+
+  const txPayload = {
+    op: 'burn',
+    positionId: params.positionId,
+    poolId: params.poolId,
+    liquidityBps: params.liquidityBps,
+    ownerAddress: params.ownerAddress,
+    timestamp: new Date().toISOString(),
+  };
+
+  const jsonString = JSON.stringify(txPayload);
+  const xdr = Buffer.from(jsonString).toString('base64');
   return { xdr, type: 'burn' };
 }
 

@@ -82,6 +82,45 @@ describe("buildSwapTx", () => {
     const tx2 = buildSwapTx({ ...validParams, amountIn: toRawAmount("5000000") });
     expect(tx1.xdr).not.toBe(tx2.xdr);
   });
+
+  it("throws when poolId is empty", () => {
+    expect(() =>
+      buildSwapTx({
+        poolId: toStellarAddress(""),
+        tokenInId: TOKEN_IN,
+        tokenOutId: TOKEN_OUT,
+        amountIn: AMOUNT_IN,
+        minimumReceived: MIN_OUT,
+        ownerAddress: OWNER,
+      })
+    ).toThrow();
+  });
+
+  it("throws when tokenInId is empty", () => {
+    expect(() =>
+      buildSwapTx({
+        poolId: POOL,
+        tokenInId: toStellarAddress(""),
+        tokenOutId: TOKEN_OUT,
+        amountIn: AMOUNT_IN,
+        minimumReceived: MIN_OUT,
+        ownerAddress: OWNER,
+      })
+    ).toThrow();
+  });
+
+  it("throws when amountIn is empty", () => {
+    expect(() =>
+      buildSwapTx({
+        poolId: POOL,
+        tokenInId: TOKEN_IN,
+        tokenOutId: TOKEN_OUT,
+        amountIn: toRawAmount(""),
+        minimumReceived: MIN_OUT,
+        ownerAddress: OWNER,
+      })
+    ).toThrow();
+  });
 });
 
 describe("cast helpers", () => {
