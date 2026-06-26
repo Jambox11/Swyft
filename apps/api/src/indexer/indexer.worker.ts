@@ -195,6 +195,22 @@ export class IndexerWorker implements OnModuleInit, OnModuleDestroy {
         sqrtPriceX96: d.sqrtPriceX96,
       },
     });
+
+    this.webhooks
+      .dispatch('pool.created', {
+        poolId: d.poolId,
+        tokenA: d.tokenA,
+        tokenB: d.tokenB,
+        fee: d.fee,
+        sqrtPriceX96: d.sqrtPriceX96,
+        eventId: d.eventId,
+      })
+      .catch((err) => {
+        this.logger.error(
+          `Failed to dispatch pool.created webhook: ${err.message}`,
+        );
+      });
+
     await this.advanceLedger(job.id, d.ledger);
   }
 
@@ -217,14 +233,25 @@ export class IndexerWorker implements OnModuleInit, OnModuleDestroy {
         tick: d.tick,
       },
     });
-    await this.webhooks.dispatch('swap', {
-      eventId: d.eventId,
-      poolId: d.poolId,
-      sender: d.sender,
-      recipient: d.recipient,
-      amount0: d.amount0,
-      amount1: d.amount1,
-    });
+
+    this.webhooks
+      .dispatch('swap.large', {
+        poolId: d.poolId,
+        sender: d.sender,
+        recipient: d.recipient,
+        amount0: d.amount0,
+        amount1: d.amount1,
+        sqrtPriceX96: d.sqrtPriceX96,
+        liquidity: d.liquidity,
+        tick: d.tick,
+        eventId: d.eventId,
+      })
+      .catch((err) => {
+        this.logger.error(
+          `Failed to dispatch swap.large webhook: ${err.message}`,
+        );
+      });
+
     await this.advanceLedger(job.id, d.ledger);
   }
 
@@ -246,16 +273,21 @@ export class IndexerWorker implements OnModuleInit, OnModuleDestroy {
         amount1: d.amount1,
       },
     });
-    await this.webhooks.dispatch('position.minted', {
-      eventId: d.eventId,
-      poolId: d.poolId,
-      owner: d.owner,
-      tickLower: d.tickLower,
-      tickUpper: d.tickUpper,
-      liquidity: d.liquidity,
-      amount0: d.amount0,
-      amount1: d.amount1,
-    });
+    // Project into relational Position table when the event includes a tokenId.
+    if (d.tokenId) {
+      await this.prisma.position.upsert({
+        where: { poolId_tokenId: { poolId: d.poolId, tokenId: d.tokenId } },
+        update: { liquidity: d.liquidity },
+        create: {
+          poolId: d.poolId,
+          tokenId: d.tokenId,
+          ownerAddress: d.owner,
+          lowerTick: d.tickLower,
+          upperTick: d.tickUpper,
+          liquidity: d.liquidity,
+        },
+      });
+    }
     await this.advanceLedger(job.id, d.ledger);
   }
 
@@ -277,16 +309,26 @@ export class IndexerWorker implements OnModuleInit, OnModuleDestroy {
         amount1: d.amount1,
       },
     });
-    await this.webhooks.dispatch('position.burned', {
-      eventId: d.eventId,
-      poolId: d.poolId,
-      owner: d.owner,
-      tickLower: d.tickLower,
-      tickUpper: d.tickUpper,
-      liquidity: d.liquidity,
-      amount0: d.amount0,
-      amount1: d.amount1,
-    });
+    // Project into relational Position table when the event includes a tokenId.
+    if (d.tokenId) {
+      const isClosed = d.liquidity === '0';
+      await this.prisma.position.upsert({
+        where: { poolId_tokenId: { poolId: d.poolId, tokenId: d.tokenId } },
+        update: {
+          liquidity: d.liquidity,
+          ...(isClosed ? { closedAt: new Date() } : {}),
+        },
+        create: {
+          poolId: d.poolId,
+          tokenId: d.tokenId,
+          ownerAddress: d.owner,
+          lowerTick: d.tickLower,
+          upperTick: d.tickUpper,
+          liquidity: d.liquidity,
+          ...(isClosed ? { closedAt: new Date() } : {}),
+        },
+      });
+    }
     await this.advanceLedger(job.id, d.ledger);
   }
 

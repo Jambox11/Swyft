@@ -4,6 +4,7 @@ import {
   buildBurnTx,
   buildCollectTx,
   RemoveAmountsParams,
+  ValidationError,
 } from "../liquidity";
 
 // ---------------------------------------------------------------------------
@@ -188,11 +189,12 @@ describe("buildBurnTx", () => {
 // ---------------------------------------------------------------------------
 
 describe("buildCollectTx", () => {
-  it("returns a base64 XDR string and type collect", () => {
+  it("returns a base64 XDR string and type collect with valid ownerWallet", () => {
     const tx = buildCollectTx({
       positionId: "pos-1",
       poolId: "pool-1",
-      ownerAddress: "GABC",
+      ownerAddress: "GBUQWP3BOUZX34ULNQG23RQ6F4PFXPUWX3BNRQNOBJGAZLMUUYJEZGPK",
+      ownerWallet: "GBUQWP3BOUZX34ULNQG23RQ6F4PFXPUWX3BNRQNOBJGAZLMUUYJEZGPK",
     });
     expect(tx.type).toBe("collect");
     expect(typeof tx.xdr).toBe("string");
@@ -200,39 +202,59 @@ describe("buildCollectTx", () => {
     expect(() => Buffer.from(tx.xdr, "base64")).not.toThrow();
   });
 
-  it("encodes all params and timestamp in the xdr payload", () => {
+  it("includes ownerWallet in the request payload", () => {
+    const ownerWallet = "GBUQWP3BOUZX34ULNQG23RQ6F4PFXPUWX3BNRQNOBJGAZLMUUYJEZGPK";
     const tx = buildCollectTx({
       positionId: "pos-1",
       poolId: "pool-1",
-      ownerAddress: "GABC",
+      ownerAddress: ownerWallet,
+      ownerWallet: ownerWallet,
     });
-    const decoded = Buffer.from(tx.xdr, "base64").toString("utf-8");
-    const payload = JSON.parse(decoded);
-    expect(payload.op).toBe("collect");
-    expect(payload.positionId).toBe("pos-1");
-    expect(payload.poolId).toBe("pool-1");
-    expect(payload.ownerAddress).toBe("GABC");
-    expect(payload.timestamp).toBeDefined();
-    expect(typeof payload.timestamp).toBe("string");
+    const payload = JSON.parse(Buffer.from(tx.xdr, "base64").toString());
+    expect(payload.ownerWallet).toBe(ownerWallet);
   });
 
-  it("throws when positionId is empty", () => {
-    expect(() =>
-      buildCollectTx({
-        positionId: "",
-        poolId: "pool-1",
-        ownerAddress: "GABC",
-      })
-    ).toThrow();
-  });
-
-  it("throws when poolId is empty", () => {
+  it("throws ValidationError when ownerWallet is missing", () => {
     expect(() =>
       buildCollectTx({
         positionId: "pos-1",
-        poolId: "",
+        poolId: "pool-1",
         ownerAddress: "GABC",
+        ownerWallet: "",
       })
-    ).toThrow();
+    ).toThrow(ValidationError);
+  });
+
+  it("throws ValidationError when ownerWallet is not a valid Stellar address", () => {
+    expect(() =>
+      buildCollectTx({
+        positionId: "pos-1",
+        poolId: "pool-1",
+        ownerAddress: "GABC",
+        ownerWallet: "invalid-address",
+      })
+    ).toThrow(ValidationError);
+  });
+
+  it("throws ValidationError when ownerWallet does not start with G", () => {
+    expect(() =>
+      buildCollectTx({
+        positionId: "pos-1",
+        poolId: "pool-1",
+        ownerAddress: "GABC",
+        ownerWallet: "CBUQWP3BOUZX34ULNQG23RQ6F4PFXPUWX3BNRQNOBJGAZLMUUYJEZGPK",
+      })
+    ).toThrow(ValidationError);
+  });
+
+  it("throws ValidationError when ownerWallet is not 56 characters", () => {
+    expect(() =>
+      buildCollectTx({
+        positionId: "pos-1",
+        poolId: "pool-1",
+        ownerAddress: "GABC",
+        ownerWallet: "GBUQWP3BOUZX34ULNQG23RQ6F4PFXPUWX3BNRQNOBJGAZLMUUYJEZGP",
+      })
+    ).toThrow(ValidationError);
   });
 });

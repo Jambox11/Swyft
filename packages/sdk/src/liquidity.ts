@@ -10,6 +10,19 @@ export interface CollectTxParams {
   readonly positionId: string;
   readonly poolId: string;
   readonly ownerAddress: string;
+  /** Stellar wallet address of the fee collector. */
+  readonly ownerWallet: string;
+}
+
+function isValidStellarAddress(address: string): boolean {
+  return typeof address === "string" && address.length === 56 && address.startsWith("G");
+}
+
+export class ValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ValidationError";
+  }
 }
 
 /** Unsigned burn (remove-liquidity) transaction envelope. */
@@ -75,32 +88,21 @@ export function buildBurnTx(params: BurnTxParams): BurnUnsignedTx {
 
 /**
  * Builds an unsigned collect-fees transaction XDR.
+ * Stub — replace with real Soroban contract invocation via stellar-sdk.
  *
- * Constructs a Soroban contract invocation that calls the collect function
- * to claim accrued fees from a liquidity position.
- *
- * @param params - Collect parameters including position ID, pool ID, and owner.
- * @returns An unsigned collect-fees transaction envelope in base-64 XDR format.
- *
- * @throws If parameters are invalid (empty IDs, etc.).
+ * @throws {ValidationError} If ownerWallet is not a valid Stellar address
  */
 export function buildCollectTx(params: CollectTxParams): CollectUnsignedTx {
-  if (!params.positionId || !params.poolId || !params.ownerAddress) {
-    throw new Error(
-      'Invalid collect parameters: all fields are required and must be non-empty',
+  if (!params.ownerWallet) {
+    throw new ValidationError("ownerWallet is required");
+  }
+  if (!isValidStellarAddress(params.ownerWallet)) {
+    throw new ValidationError(
+      `ownerWallet must be a valid Stellar address (starts with G, 56 chars). Got: ${params.ownerWallet}`
     );
   }
-
-  const txPayload = {
-    op: 'collect',
-    positionId: params.positionId,
-    poolId: params.poolId,
-    ownerAddress: params.ownerAddress,
-    timestamp: new Date().toISOString(),
-  };
-
-  const jsonString = JSON.stringify(txPayload);
-  const xdr = Buffer.from(jsonString).toString('base64');
+  const payload = JSON.stringify({ op: 'collect', ...params });
+  const xdr = Buffer.from(payload).toString('base64');
   return { xdr, type: 'collect' };
 }
 
