@@ -7,6 +7,7 @@ import {
 import { Worker, Job, QueueEvents } from 'bullmq';
 import { PrismaClient } from '@prisma/client';
 import { CacheService } from '../cache/cache.service';
+import { WebhooksService } from '../webhooks/webhooks.service';
 import { LAST_INDEXED_LEDGER_KEY } from '../metrics/indexer-monitor.service';
 import {
   QUEUE_NAMES,
@@ -28,7 +29,10 @@ export class IndexerWorker implements OnModuleInit, OnModuleDestroy {
   private _isLoading = false;
   private _isReady = false;
 
-  constructor(private readonly cache: CacheService) {}
+  constructor(
+    private readonly cache: CacheService,
+    private readonly webhooks: WebhooksService,
+  ) {}
 
   get isLoading(): boolean {
     return this._isLoading;
@@ -213,6 +217,14 @@ export class IndexerWorker implements OnModuleInit, OnModuleDestroy {
         tick: d.tick,
       },
     });
+    await this.webhooks.dispatch('swap', {
+      eventId: d.eventId,
+      poolId: d.poolId,
+      sender: d.sender,
+      recipient: d.recipient,
+      amount0: d.amount0,
+      amount1: d.amount1,
+    });
     await this.advanceLedger(job.id, d.ledger);
   }
 
@@ -234,6 +246,16 @@ export class IndexerWorker implements OnModuleInit, OnModuleDestroy {
         amount1: d.amount1,
       },
     });
+    await this.webhooks.dispatch('position.minted', {
+      eventId: d.eventId,
+      poolId: d.poolId,
+      owner: d.owner,
+      tickLower: d.tickLower,
+      tickUpper: d.tickUpper,
+      liquidity: d.liquidity,
+      amount0: d.amount0,
+      amount1: d.amount1,
+    });
     await this.advanceLedger(job.id, d.ledger);
   }
 
@@ -254,6 +276,16 @@ export class IndexerWorker implements OnModuleInit, OnModuleDestroy {
         amount0: d.amount0,
         amount1: d.amount1,
       },
+    });
+    await this.webhooks.dispatch('position.burned', {
+      eventId: d.eventId,
+      poolId: d.poolId,
+      owner: d.owner,
+      tickLower: d.tickLower,
+      tickUpper: d.tickUpper,
+      liquidity: d.liquidity,
+      amount0: d.amount0,
+      amount1: d.amount1,
     });
     await this.advanceLedger(job.id, d.ledger);
   }
