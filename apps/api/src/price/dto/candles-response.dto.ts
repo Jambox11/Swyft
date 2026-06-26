@@ -6,5 +6,5 @@ export class CandlesResponseDto {
     description: 'Array of candlestick data',
     type: [PriceCandleDto],
   })
-  data: PriceCandleDto[];
+  candles: PriceCandleDto[];
 }
