@@ -1,4 +1,10 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { CacheService, TTL } from '../cache/cache.service';
 import { GetPoolsQueryDto } from './dto/get-pools-query.dto';
 import { PoolListQuery, PoolOrderBy, PoolSnapshot } from './pool.types';
@@ -58,6 +64,52 @@ export interface Swap {
   txHash: string;
 }
 
+/**
+ * Stable error codes for the pool-factory money path. Clients must branch on
+ * these codes (never on message text) so retries and idempotency handling stay
+ * deterministic across releases.
+ */
+export const POOL_FACTORY_ERROR_CODES = {
+  UNAUTHORIZED: 'POOL_FACTORY_UNAUTHORIZED',
+  INVALID_INPUT: 'POOL_FACTORY_INVALID_INPUT',
+  IDEMPOTENCY_CONFLICT: 'POOL_FACTORY_IDEMPOTENCY_CONFLICT',
+  DEPLOY_FAILED: 'POOL_FACTORY_DEPLOY_FAILED',
+  REGISTRY_UNAVAILABLE: 'POOL_FACTORY_REGISTRY_UNAVAILABLE',
+} as const;
+
+export type PoolFactoryErrorCode =
+  (typeof POOL_FACTORY_ERROR_CODES)[keyof typeof POOL_FACTORY_ERROR_CODES];
+
+/**
+ * Trusted caller context. Privileged pool-factory surfaces are deny-by-default:
+ * a request without an authenticated, authorized actor is rejected before any
+ * write is attempted.
+ */
+export interface PoolFactoryActor {
+  id: string;
+  roles: string[];
+}
+
+export interface DeployPoolRequest {
+  token0: string;
+  token1: string;
+  feeTier: number;
+  /** Client-supplied idempotency key; replays return the original result. */
+  idempotencyKey: string;
+  /** Correlation id propagated to logs/metrics for tracing. */
+  correlationId?: string;
+}
+
+export interface DeployPoolResult {
+  poolId: string;
+  registryEntryId: string;
+  created: boolean;
+  correlationId: string;
+}
+
+const POOL_FACTORY_ROLE = 'pool:factory';
+const IDEMPOTENCY_TTL_SECONDS = 24 * 60 * 60;
+
 @Injectable()
 export class PoolsService {
   private readonly logger = new Logger(PoolsService.name);
@@ -103,6 +155,139 @@ export class PoolsService {
   ): Promise<void> {
     await this.poolsRepository.upsertPoolState(poolId, patch);
     await this.invalidateListCache();
+  }
+
+  /**
+   * Deploy a pool and register it exactly once. Idempotent on
+   * `idempotencyKey`: concurrent or replayed requests return the original
+   * result instead of creating duplicate pools or registry entries.
+   *
+   * Fail-closed: authorization is checked first, and any registry failure
+   * aborts the write rather than leaving an unregistered pool behind.
+   */
+  async deployPool(
+    actor: PoolFactoryActor | undefined,
+    request: DeployPoolRequest,
+  ): Promise<DeployPoolResult> {
+    const correlationId = request.correlationId ?? this.newCorrelationId();
+
+    if (!this.isAuthorized(actor)) {
+      this.logger.warn(
+        `pool-factory deploy denied correlationId=${correlationId} actor=${actor?.id ?? 'anonymous'}`,
+      );
+      throw new ForbiddenException({
+        code: POOL_FACTORY_ERROR_CODES.UNAUTHORIZED,
+        correlationId,
+      });
+    }
+
+    const token0 = request.token0?.trim().toLowerCase();
+    const token1 = request.token1?.trim().toLowerCase();
+    const idempotencyKey = request.idempotencyKey?.trim();
+    if (
+      !token0 ||
+      !token1 ||
+      token0 === token1 ||
+      !Number.isInteger(request.feeTier) ||
+      request.feeTier <= 0 ||
+      !idempotencyKey
+    ) {
+      throw new ConflictException({
+        code: POOL_FACTORY_ERROR_CODES.INVALID_INPUT,
+        correlationId,
+      });
+    }
+
+    const idempotencyCacheKey = `pool-factory:idempotency:${idempotencyKey}`;
+    const existing = await this.cache.get<DeployPoolResult>(idempotencyCacheKey);
+    if (existing) {
+      this.logger.log(
+        `pool-factory deploy replay correlationId=${correlationId} poolId=${existing.poolId}`,
+      );
+      return { ...existing, created: false, correlationId };
+    }
+
+    // Registry is the source of truth for pool identity; a duplicate registry
+    // entry means the pool already exists and must not be re-deployed.
+    const registered = await this.poolsRepository.findPoolByTokens(
+      token0,
+      token1,
+      request.feeTier,
+    );
+    if (registered) {
+      const result: DeployPoolResult = {
+        poolId: registered.id,
+        registryEntryId: registered.id,
+        created: false,
+        correlationId,
+      };
+      await this.cache.set(
+        idempotencyCacheKey,
+        result,
+        IDEMPOTENCY_TTL_SECONDS,
+      );
+      return result;
+    }
+
+    let deployed: { id: string };
+    try {
+      deployed = await this.poolsRepository.deployPool({
+        token0,
+        token1,
+        feeTier: request.feeTier,
+      });
+    } catch (error) {
+      this.logger.error(
+        `pool-factory deploy failed correlationId=${correlationId} error=${(error as Error).message}`,
+      );
+      throw new ConflictException({
+        code: POOL_FACTORY_ERROR_CODES.DEPLOY_FAILED,
+        correlationId,
+      });
+    }
+
+    let registryEntryId: string;
+    try {
+      registryEntryId = await this.poolsRepository.registerPool({
+        poolId: deployed.id,
+        token0,
+        token1,
+        feeTier: request.feeTier,
+      });
+    } catch (error) {
+      this.logger.error(
+        `pool-factory registry write failed correlationId=${correlationId} poolId=${deployed.id} error=${(error as Error).message}`,
+      );
+      throw new ConflictException({
+        code: POOL_FACTORY_ERROR_CODES.REGISTRY_UNAVAILABLE,
+        correlationId,
+      });
+    }
+
+    const result: DeployPoolResult = {
+      poolId: deployed.id,
+      registryEntryId,
+      created: true,
+      correlationId,
+    };
+    await this.cache.set(idempotencyCacheKey, result, IDEMPOTENCY_TTL_SECONDS);
+    await this.invalidateListCache();
+
+    this.logger.log(
+      `pool-factory deploy ok correlationId=${correlationId} poolId=${deployed.id} registryEntryId=${registryEntryId}`,
+    );
+    return result;
+  }
+
+  private isAuthorized(actor: PoolFactoryActor | undefined): boolean {
+    if (!actor || !actor.id) return false;
+    return Array.isArray(actor.roles) && actor.roles.includes(POOL_FACTORY_ROLE);
+  }
+
+  private newCorrelationId(): string {
+    return `pf-${Date.now().toString(36)}-${Math.random()
+      .toString(36)
+      .slice(2, 10)}`;
   }
 
   private async invalidateListCache(): Promise<void> {
