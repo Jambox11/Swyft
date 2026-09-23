@@ -81,6 +81,83 @@ stable error codes, and are deny-by-default for privileged surfaces.
 - Rollback: flip the flag off and redeploy the previous router wasm; no pool
   state migration is required.
 
+## Position NFT: LP NFT Mint / Burn / Transfer Rules
+
+The `position-nft` contract mints one NFT per concentrated-liquidity position.
+The NFT is the on-chain proof of ownership for the position's liquidity and
+accrued fees. All lifecycle entrypoints are typed, return stable error codes,
+and are deny-by-default for privileged surfaces.
+
+### Entrypoints
+
+| Entrypoint        | Direction | Semantics                                              |
+| ----------------- | --------- | ------------------------------------------------------ |
+| `mint`            | write     | Mint a position NFT on liquidity provision             |
+| `burn`            | write     | Burn the position NFT on full withdrawal               |
+| `transfer`        | write     | Transfer the position NFT to a new owner               |
+| `owner_of`        | read      | Return the current owner of a position NFT             |
+
+### Invariants
+
+- **Mint on provision.** `mint` is called exactly once per new position and
+  records the pool id, tick range, and liquidity amount. The contract is the
+  source of truth for ownership; client-supplied owner ids are ignored unless
+  they match the authenticated caller.
+- **Burn on full withdrawal.** `burn` is only valid when the position's
+  liquidity is fully withdrawn and all accrued fees are collected. Partial
+  withdrawals must not burn the NFT; they revert with
+  `PositionNftError::PositionNotClosed`.
+- **Transfer only by authorized owner.** `transfer` requires the caller to be
+  the current owner (or an approved operator). Untrusted clients cannot move a
+  position they do not own; unauthorized callers receive
+  `PositionNftError::Unauthorized`.
+- **One NFT per position.** A position id maps to at most one live NFT; minting
+  a duplicate id reverts with `PositionNftError::DuplicateRequest`.
+- **Idempotency.** Each mint/burn/transfer carries a caller-supplied
+  `correlation_id`. Replayed or concurrent requests with a previously consumed
+  id are rejected with `PositionNftError::DuplicateRequest` and never mutate
+  ownership twice.
+- **Fail-closed on dependency outage.** If the pool/RPC dependency is
+  unavailable, writes revert with `PositionNftError::DependencyUnavailable`
+  rather than proceeding on stale ownership or liquidity data.
+
+### Stable error codes
+
+| Code | Name                     | Meaning                                          |
+| ---- | ------------------------ | ------------------------------------------------ |
+| 1    | `Unauthorized`           | Caller is not owner/operator or lacks role       |
+| 2    | `PositionNotClosed`      | Burn attempted before full withdrawal            |
+| 3    | `DuplicateRequest`       | `correlation_id` already consumed (replay)       |
+| 4    | `DependencyUnavailable`  | Pool/RPC dependency outage; write failed closed  |
+| 5    | `InvalidAmount`          | Zero/negative or malformed liquidity amount      |
+| 6    | `NotFound`               | Position id has no live NFT                      |
+
+### Authorization
+
+- `mint` is permissionless for the caller's own liquidity but every request is
+  authorized against position policy; untrusted clients cannot mint a position
+  they did not fund.
+- `burn` and `transfer` are **deny-by-default**: only the current owner or an
+  explicitly approved operator may call them. Unauthorized callers receive
+  `PositionNftError::Unauthorized`.
+- Privileged surfaces (operator approval, admin config) require the admin role
+  and are deny-by-default.
+
+### Observability
+
+- Money-path metrics are emitted per lifecycle event: operation
+  (mint/burn/transfer), position id, pool id, owner, and outcome code.
+- Logs carry the `correlation_id` for tracing and **never** include secrets,
+  private keys, or raw signatures.
+
+### Rollout / kill-switch
+
+- Position NFT writes are gated behind a feature flag; disabling it makes
+  `mint`/`burn`/`transfer` revert with
+  `PositionNftError::DependencyUnavailable` (fail-closed).
+- Rollback: flip the flag off and redeploy the previous position-nft wasm; no
+  position state migration is required.
+
 ## Validation
 
 Run the contract validation CLI:
