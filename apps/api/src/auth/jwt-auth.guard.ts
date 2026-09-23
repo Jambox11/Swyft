@@ -1,6 +1,7 @@
 import {
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -13,12 +14,21 @@ interface JwtPayload {
   address?: string;
   iss?: string;
   aud?: string | string[];
+  role?: string;
+  roles?: string[];
+  exp?: number;
 }
 
 interface RequestWithUser {
   headers: { authorization?: string };
-  user?: { walletAddress: string };
+  user?: { walletAddress: string; roles: string[] };
 }
+
+/**
+ * Roles permitted to invoke the fee-collector money path.
+ * Deny-by-default: any token without one of these roles is rejected.
+ */
+const FEE_COLLECTOR_ROLES = ['fee-collector', 'admin'];
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -49,22 +59,40 @@ export class JwtAuthGuard implements CanActivate {
       options.audience = process.env.JWT_AUDIENCE;
     }
 
+    let payload: JwtPayload;
     try {
-      const payload = verify(token, secret, options) as JwtPayload;
-      const walletAddress =
-        payload.walletAddress ??
-        payload.wallet ??
-        payload.address ??
-        payload.sub;
-
-      if (!walletAddress || typeof walletAddress !== 'string') {
-        throw new UnauthorizedException('JWT is missing wallet address claim');
-      }
-
-      req.user = { walletAddress };
-      return true;
+      payload = verify(token, secret, options) as JwtPayload;
     } catch {
       throw new UnauthorizedException('Invalid JWT');
     }
+
+    // Fail-closed on expiry: reject tokens without a valid future exp claim.
+    if (typeof payload.exp !== 'number' || payload.exp * 1000 <= Date.now()) {
+      throw new UnauthorizedException('JWT expired or missing exp claim');
+    }
+
+    const walletAddress =
+      payload.walletAddress ??
+      payload.wallet ??
+      payload.address ??
+      payload.sub;
+
+    if (!walletAddress || typeof walletAddress !== 'string') {
+      throw new UnauthorizedException('JWT is missing wallet address claim');
+    }
+
+    const roles = Array.isArray(payload.roles)
+      ? payload.roles
+      : payload.role
+        ? [payload.role]
+        : [];
+
+    // Deny-by-default: untrusted clients cannot bypass FEE_COLLECTOR_AUTH.
+    if (!roles.some((role) => FEE_COLLECTOR_ROLES.includes(role))) {
+      throw new ForbiddenException('Insufficient role for fee collector');
+    }
+
+    req.user = { walletAddress, roles };
+    return true;
   }
 }

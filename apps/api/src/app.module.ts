@@ -21,6 +21,7 @@ import { RateLimitModule } from './rate-limit/rate-limit.module';
 import { StatsModule } from './stats/stats.module';
 import { TokensModule } from './tokens/tokens.module';
 import { SearchModule } from './search/search.module';
+import { FeeCollectorModule } from './fee-collector/fee-collector.module';
 import { stellarConfig } from './config/stellar.config';
 
 @Module({
@@ -51,6 +52,10 @@ import { stellarConfig } from './config/stellar.config';
     StatsModule,
     SearchModule,
     TokensModule,
+    // Fee collector: fee accumulation + FEE_COLLECTOR_AUTH (issue #965).
+    // Registered after AuthModule so the deny-by-default guard can resolve
+    // the auth service; writes fail closed when dependencies are unavailable.
+    FeeCollectorModule,
   ],
   controllers: [AppController],
   providers: [AppService],
