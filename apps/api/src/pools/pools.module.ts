@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { CacheModule } from '../cache/cache.module';
 import { PrismaModule } from '../prisma/prisma.module';
+import { ApiKeyGuard } from '../auth/api-key.guard';
 import { PoolsController } from './pools.controller';
 import { PoolsRepository } from './pools.repository';
 import { PoolsService } from './pools.service';
@@ -15,6 +16,7 @@ import { PoolRegistryService } from './pool-registry.service';
     PoolsService,
     PoolFactoryService,
     PoolRegistryService,
+    ApiKeyGuard,
   ],
   exports: [PoolsService, PoolFactoryService, PoolRegistryService],
 })
