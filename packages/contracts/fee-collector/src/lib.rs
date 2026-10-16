@@ -77,6 +77,12 @@ impl FeeCollector {
     /// Inbound fee collect path: an authorized pool deposits protocol fees.
     ///
     /// Rejects callers that are not in the authorized-pool registry.
+    ///
+    /// When the fee switch is disabled (`FeeSwitch` is false) this call is a
+    /// no-op: no tokens are transferred and the current `Fees(token)` balance is
+    /// returned unchanged. A returned value equal to the pre-call accumulated
+    /// balance therefore means the deposit was skipped because the switch is
+    /// off, not that it was applied.
     pub fn deposit_protocol_fees(env: Env, token: Address, from: Address, amount: i128) -> i128 {
         if amount <= 0 {
             panic!("fee amount must be positive");
